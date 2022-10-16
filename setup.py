@@ -1,20 +1,33 @@
 #!/usr/bin/env python3
-import json, time, os, sys, subprocess, shlex, platform,argparse
-from shutil import copyfile
+
+import time
+import os
+import sys
+import subprocess
+import shlex
+import platform
+import argparse
+
 from subprocess import PIPE, Popen
-from prekinto import *
 
-parser = argparse.ArgumentParser()
+from prekinto import (
+	bcolors,
+	yn_choice,
+)
 
-parser.add_argument('-r', dest='uninstall', action='store_true', help="uninstall kinto")
-parser.add_argument('--remove', dest='uninstall', action='store_true', help="uninstall kinto")
+class Config:
+	homedir = os.path.expanduser("~")
 
-args = parser.parse_args()
 
-homedir = os.path.expanduser("~")
-kintotype = 0
+def make_config_dir():
+	if os.path.isdir(Config.homedir + "/.config/kinto") == False:
+		os.mkdir(Config.homedir + "/.config/kinto")
+		time.sleep(0.5)
+
 
 def windows_setup():
+	# 暂时去掉 windows 的支持
+	return print('not support windows')
 	keymaps = ["Apple keyboard standard", "Windows keyboard standard","Chromebook","IBM - No Super/Win","Uninstall"]
 	for index, item in enumerate(keymaps):
 		print("    %i. %s" % (index+1, item))
@@ -87,6 +100,7 @@ def windows_setup():
 	else:
 		os.system("(del \"C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp\\kinto.ahk\") 2> nul")
 
+
 def cmdline(command):
     process = Popen(
         args=command,
@@ -96,44 +110,68 @@ def cmdline(command):
     )
     return process.communicate()[0]
 
-if platform.system() == 'Windows':
-	print("\nYou are detected as running Windows.")
-	windows_setup()
-	sys.exit()
 
-check_x11 = cmdline("(env | grep -i x11 || loginctl show-session \"$XDG_SESSION_ID\" -p Type) | awk -F= '{print $2}'").strip()
-
-if len(check_x11) == 0:
-	if os.name != 'nt':
-		print("You are not using x11, please logout and back in using x11/Xorg")
-		sys.exit()
-	else:
+def check_platform():
+	if platform.system() == 'Windows':
 		print("\nYou are detected as running Windows.")
 		windows_setup()
 		sys.exit()
 
-distro = cmdline("awk -F= '$1==\"NAME\" { print $2 ;}' /etc/os-release").replace('"','').strip().split(" ")[0]
-dename = cmdline("./linux/system-config/dename.sh").replace('"','').strip().split(" ")[0].lower()
 
-run_pkg = ""
-
-if os.path.isdir(homedir + "/.config/kinto") == False:
-	os.mkdir(homedir + "/.config/kinto")
-	time.sleep(0.5)
-
-
-cmdline("git fetch")
-
-color_arr = [bcolors.CBEIGE,bcolors.CRED2,bcolors.CGREEN,bcolors.CYELLOW ]
-
-kintover = cmdline('echo "$(git describe --tag --abbrev=0 | head -n 1)" "build" "$(git rev-parse --short HEAD)"')
-
-print("\nKinto " + kintover + "Type in Linux like it's a Mac.\n")
-
-if args.uninstall:
-	subprocess.check_call(shlex.split("./xkeysnail_service.sh uninstall"))
-	exit()
-
-subprocess.check_call(shlex.split("./xkeysnail_service.sh"))
+def check_x11():
+	# x11
+	check_res = cmdline("(env | grep -i x11 || loginctl show-session \"$XDG_SESSION_ID\" -p Type) | awk -F= '{print $2}'").strip()
+	if len(check_res) == 0:
+		if os.name != 'nt':
+			print("You are not using x11, please logout and back in using x11/Xorg")
+			sys.exit()
+		else:
+			print("\nYou are detected as running Windows.")
+			windows_setup()
+			sys.exit()
 
 
+def check_desktop():
+	# desktop
+	distro = cmdline("awk -F= '$1==\"NAME\" { print $2 ;}' /etc/os-release").replace('"','').strip().split(" ")[0]
+	dename = cmdline("./linux/system-config/dename.sh").replace('"','').strip().split(" ")[0].lower()
+
+
+def echo_info():
+	kintover = cmdline('echo "$(git describe --tag --abbrev=0 | head -n 1)" "build" "$(git rev-parse --short HEAD)"')
+
+	print("\nKinto " + kintover + "Type in Linux like it's a Mac.\n")
+
+
+# 这几个变量没有用到
+# kintotype = 0
+# run_pkg = ""
+# color_arr = [bcolors.CBEIGE, bcolors.CRED2, bcolors.CGREEN, bcolors.CYELLOW,]
+
+
+def run():
+	parser = argparse.ArgumentParser()
+	parser.add_argument('-r', dest='uninstall', action='store_true', help="uninstall kinto")
+	parser.add_argument('--remove', dest='uninstall', action='store_true', help="uninstall kinto")
+	args = parser.parse_args()
+
+	if args.uninstall:
+		subprocess.check_call(shlex.split("./xkeysnail_service.sh uninstall"))
+		exit()
+	else:
+		subprocess.check_call(shlex.split("./xkeysnail_service.sh"))
+
+
+def main():
+	check_platform()
+	check_x11()
+	check_desktop()
+	make_config_dir()
+	cmdline("git fetch")
+	echo_info()
+	run()
+	...
+
+
+if __name__ == "__main__":
+	main()
